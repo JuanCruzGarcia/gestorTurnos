@@ -5,19 +5,52 @@ import { getAuth } from 'firebase/auth';
 
 export default function ReservarTurno() {
   const [turnos, setTurnos] = useState([]);
+  const [canchasMap, setCanchasMap] = useState({});
+  const [clubesMap, setClubesMap] = useState({});
 
   useEffect(() => {
-    const fetchTurnos = async () => {
-      const q = query(collection(db, 'turnos'), where('estado', '==', 'disponible'));
-      const snapshot = await getDocs(q);
-      const datos = snapshot.docs.map(doc => ({
+    const fetchDatos = async () => {
+      // 1. Traer turnos disponibles
+      const turnosQuery = query(collection(db, 'turnos'), where('estado', '==', 'disponible'));
+      const turnosSnapshot = await getDocs(turnosQuery);
+      const turnosData = turnosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // 2. Traer canchas
+      const canchasSnapshot = await getDocs(collection(db, 'canchas'));
+      const canchasData = canchasSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setTurnos(datos);
+      const canchasMap = {};
+      canchasData.forEach(c => canchasMap[c.id] = c);
+      setCanchasMap(canchasMap);
+
+      // 3. Traer clubes
+      const clubesSnapshot = await getDocs(collection(db, 'clubes'));
+      const clubesData = clubesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      const clubesMap = {};
+      clubesData.forEach(c => clubesMap[c.id] = c);
+      setClubesMap(clubesMap);
+
+      // 4. Enriquecer turnos con nombres
+      const turnosEnriquecidos = turnosData.map(turno => {
+        const cancha = canchasMap[turno.idCancha];
+        const club = cancha ? clubesMap[cancha.idClub] : null;
+
+        return {
+          ...turno,
+          nombreCancha: cancha?.nombre || 'Desconocido',
+          nombreClub: club?.nombre || 'Desconocido'
+        };
+      });
+
+      setTurnos(turnosEnriquecidos);
     };
 
-    fetchTurnos();
+    fetchDatos();
   }, []);
 
   const handleReserva = async (turnoId) => {
@@ -53,7 +86,8 @@ export default function ReservarTurno() {
       <ul className="space-y-4">
         {turnos.map(turno => (
           <li key={turno.id} className="border p-3 rounded shadow">
-            <p>📍 Cancha: {turno.idCancha}</p>
+            <p>🏟️ Club: <strong>{turno.nombreClub}</strong></p>
+            <p>🎾 Cancha: <strong>{turno.nombreCancha}</strong></p>
             <p>📅 Fecha: {turno.fecha}</p>
             <p>⏰ Hora: {turno.hora}</p>
             <button
